@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文档 — Podcast Studio</title>
+<link rel="stylesheet" href="/_shared.css">
+<script src="/_shared.js"></script>
+<style>
+  .docs-layout { display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; }
+  .docs-toc { flex: 0 0 200px; position: sticky; top: 80px; align-self: flex-start; max-height: calc(100vh - 120px); overflow-y: auto; }
+  .docs-toc h3 { font-size: 0.85rem; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .docs-toc ul { list-style: none; padding: 0; margin: 0; }
+  .docs-toc li { margin-bottom: 6px; }
+  .docs-toc a { display: block; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; color: var(--ink); text-decoration: none; transition: all 0.2s; border-left: 2px solid transparent; }
+  .docs-toc a:hover { background: var(--bg3); border-left-color: var(--accent2); }
+  .docs-toc a.active { background: var(--bg3); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .docs-content { flex: 1; min-width: 0; }
+  @media (max-width: 768px) { .docs-layout { flex-direction: column; } .docs-toc { position: static; flex: none; max-height: none; } }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="brand">🎙 Podcast Studio</span>
+  <div class="nav-links">
+    <a href="/">首页</a>
+    <a href="/studio.html">工作室</a>
+    <a href="/library.html">播客库</a>
+    <a href="/player.html">播放器</a>
+    <a href="/docs.html" class="active">文档</a>
+  </div>
+</nav>
+
+<div class="main">
+  <h1 class="page-title">使用文档</h1>
+
+  <p style="color: var(--muted); margin-bottom: 24px;">
+    增强版播客生成流水线文档 — 支持 7 种 TTS 引擎、专业级音频后处理、REST API 与 RSS 分发。
+  </p>
+
+  <div class="docs-layout">
+    <!-- Sticky Table of Contents -->
+    <nav class="docs-toc card" style="padding: 16px;">
+      <h3>📑 目录导航</h3>
+      <ul id="tocList">
+        <li><a href="#formats" onclick="scrollToSection('formats');return false;">支持的书籍格式</a></li>
+        <li><a href="#cli" onclick="scrollToSection('cli');return false;">命令行用法</a></li>
+        <li><a href="#engines" onclick="scrollToSection('engines');return false;">TTS 引擎对比</a></li>
+        <li><a href="#api" onclick="scrollToSection('api');return false;">REST API 文档</a></li>
+        <li><a href="#pipeline" onclick="scrollToSection('pipeline');return false;">处理流水线架构</a></li>
+        <li><a href="#tools" onclick="scrollToSection('tools');return false;">集成的开源工具</a></li>
+      </ul>
+    </nav>
+
+    <div class="docs-content">
+
+  <h2 class="section-title" id="formats">支持的书籍格式</h2>
+  <div class="card">
+    <table class="table">
+      <thead><tr><th>格式</th><th>扩展名</th><th>解析方式</th><th>章节识别</th></tr></thead>
+      <tbody>
+        <tr><td>PDF</td><td>.pdf</td><td>pdfplumber 逐页提取</td><td>正则匹配「第X章」/「Chapter N」</td></tr>
+        <tr><td>EPUB</td><td>.epub</td><td>ebooklib 文档项提取</td><td>EPUB 内置 TOC / h1-h3 标题</td></tr>
+        <tr><td>纯文本</td><td>.txt</td><td>chardet 自动编码检测</td><td>正则匹配章节标题</td></tr>
+        <tr><td>Word</td><td>.docx</td><td>python-docx 段落提取</td><td>Heading 样式识别</td></tr>
+        <tr><td>HTML</td><td>.html / .htm</td><td>BeautifulSoup 解析</td><td>h1-h3 标题标签</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="section-title" id="cli">命令行用法</h2>
+  <div class="card">
+    <h3>基本语法</h3>
+    <div class="code-block">python3 book_to_podcast.py --book PATH [options]</div>
+
+    <h3 style="margin-top: 20px;">选项说明</h3>
+    <div class="code-block">Options:
+  --book PATH              Book file (PDF/EPUB/TXT/DOCX/HTML)
+  --output DIR             Output directory
+  --episodes N             Max episodes (0=all)
+  --engine NAME            TTS engine preference
+  --format wav|mp3         Output format
+  --script-only            Only generate script HTML
+  --no-eq                  Disable voice EQ
+  --no-noise-reduction     Disable AI noise reduction
+  --no-pedalboard          Disable pedalboard studio effects
+  --no-rss                 Skip RSS feed generation
+  --no-id3                 Skip ID3 tag embedding
+  --list-engines           List available TTS engines
+  -v, --verbose            Debug logging</div>
+
+    <h3 style="margin-top: 20px;">使用示例</h3>
+    <p style="color: var(--muted); margin-bottom: 8px;">完整流水线（默认全部增强开启）</p>
+    <div class="code-block">python3 book_to_podcast.py --book your_book.pdf --engine xtts-v2 --format mp3</div>
+
+    <p style="color: var(--muted); margin: 16px 0 8px;">仅生成剧本（不做 TTS）</p>
+    <div class="code-block">python3 book_to_podcast.py --book your_book.epub --script-only</div>
+
+    <p style="color: var(--muted); margin: 16px 0 8px;">限制集数 + MP3 + 关闭降噪</p>
+    <div class="code-block">python3 book_to_podcast.py --book your_book.txt --episodes 5 --format mp3 --no-noise-reduction</div>
+
+    <p style="color: var(--muted); margin: 16px 0 8px;">列出所有可用 TTS 引擎</p>
+    <div class="code-block">python3 book_to_podcast.py --list-engines</div>
+  </div>
+
+  <h2 class="section-title" id="engines">TTS 引擎对比</h2>
+  <div class="card">
+    <p style="color: var(--muted); margin-bottom: 16px;">
+      流水线集成 7 种 TTS 后端，按质量分（1-10）自动择优选用。质量分越高代表语音自然度越佳。
+    </p>
+    <table class="table">
+      <thead><tr><th>引擎</th><th>质量</th><th>在线/离线</th><th>中文支持</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-accent">XTTS-v2</span></td><td>10</td><td>在线</td><td>极佳（声纹克隆）</td><td>支持零样本语音克隆，可自定义任意音色</td></tr>
+        <tr><td><span class="badge badge-blue">edge-tts</span></td><td>9</td><td>在线</td><td>极佳（自然语音）</td><td>Microsoft 神经网络语音，4 种中文声线，免费免密钥</td></tr>
+        <tr><td><span class="badge badge-blue">MeloTTS</span></td><td>8</td><td>离线</td><td>优（MIT 神经网络）</td><td>MIT 协议开源神经 TTS，多语言高质量本地推理</td></tr>
+        <tr><td><span class="badge badge-muted">Piper</span></td><td>7</td><td>离线</td><td>良</td><td>Rhasspy 项目高性能嵌入式 TTS，低资源设备友好</td></tr>
+        <tr><td><span class="badge badge-muted">pyttsx3</span></td><td>5</td><td>离线</td><td>依赖系统语音</td><td>调用系统原生 TTS 引擎，跨平台兼容</td></tr>
+        <tr><td><span class="badge badge-muted">espeak</span></td><td>3</td><td>离线</td><td>可用（机械音）</td><td>音素合成器，速度极快但音质机械</td></tr>
+        <tr><td><span class="badge badge-muted">ffmpeg-tts</span></td><td>2</td><td>离线</td><td>差（纯音调）</td><td>FFmpeg 内置 tone 生成，仅作保底后备方案</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="section-title" id="api">REST API 文档</h2>
+  <p style="color: var(--muted); margin-bottom: 16px;">
+    所有 API 响应统一使用 <code>{ "success": bool, ... }</code> 格式。成功时业务数据平铺在顶层，失败时包含 <code>"error"</code> 字段。
+  </p>
+
+  <div class="card">
+    <h3>GET /api/engines</h3>
+    <p style="color: var(--muted); margin-bottom: 12px;">列出所有 TTS 引擎及其当前可用性。</p>
+    <p><strong>响应示例:</strong></p>
+    <div class="code-block">{
+  "success": true,
+  "active_engine": "edge-tts",
+  "engines": [
+    {
+      "name": "edge-tts",
+      "available": true,
+      "quality_score": 9,
+      "is_offline": false,
+      "supports_chinese": true,
+      "voice_count": 4,
+      "description": "Microsoft Edge Neural TTS"
+    }
+  ]
+}</div>
+  </div>
+
+  <div class="card">
+    <h3>GET /api/health</h3>
+    <p style="color: var(--muted); margin-bottom: 12px;">系统健康检查（30 秒缓存）。验证关键依赖是否就绪。</p>
+    <p><strong>检查项:</strong></p>
+    <p style="color: var(--muted); margin: 8px 0;">
+      edge_tts · ffmpeg · noisereduce · pedalboard · feedgen · mutagen · langdetect · markdown
+    </p>
+    <p style="margin-top: 12px;"><strong>响应示例:</strong></p>
+    <div class="code-block">{
+  "success": true,
+  "status": "healthy",
+  "checks": {
+    "edge_tts": true,
+    "ffmpeg": true,
+    "noisereduce": true,
+    "pedalboard": true,
+    "feedgen": true,
+    "mutagen": true,
+    "langdetect": true,
+    "markdown": true
+  },
+  "output_dir": "/workspace/podcast-output",
+  "upload_dir": "/workspace/.uploads",
+  "timestamp": "2026-07-04T12:00:00",
+  "cached": true
+}</div>
+    <p style="color: var(--muted); font-size: 0.85rem; margin-top: 8px;">
+      注：<code>"cached": true</code> 仅在返回缓存结果时出现。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>POST /api/generate</h3>
+    <p style="color: var(--muted); margin-bottom: 16px;">启动异步播客生成任务。上传书籍文件并触发完整流水线。</p>
+    <p><strong>请求体:</strong> multipart/form-data</p>
+    <table class="table" style="margin-top: 8px;">
+      <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>file</td><td>File</td><td>书籍文件（必填，PDF/EPUB/TXT/DOCX/HTML）</td></tr>
+        <tr><td>engine</td><td>String</td><td>TTS 引擎偏好</td></tr>
+        <tr><td>maxEpisodes</td><td>Int</td><td>最大生成集数（0=全部）</td></tr>
+        <tr><td>format</td><td>String</td><td>音频格式: wav 或 mp3</td></tr>
+        <tr><td>enableEq</td><td>Bool</td><td>启用语音均衡器</td></tr>
+        <tr><td>scriptOnly</td><td>Bool</td><td>仅生成剧本 HTML</td></tr>
+        <tr><td>enableNoiseReduction</td><td>Bool</td><td>启用 noisereduce AI 降噪</td></tr>
+        <tr><td>enablePedalboard</td><td>Bool</td><td>启用 pedalboard 录音棚效果</td></tr>
+        <tr><td>generateRss</td><td>Bool</td><td>生成 RSS 2.0 feed</td></tr>
+        <tr><td>embedId3</td><td>Bool</td><td>嵌入 ID3 元数据标签</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top: 16px;"><strong>响应示例:</strong></p>
+    <div class="code-block">{
+  "success": true,
+  "job_id": "a1b2c3d4e5f6",
+  "session_id": "a1b2c3d4e5f6",
+  "status": "pending",
+  "message": "Generation started for book.pdf"
+}</div>
+    <p style="color: var(--muted); font-size: 0.85rem; margin-top: 8px;">
+      注：<code>job_id</code> 和 <code>session_id</code> 均为 12 位十六进制字符串。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>GET /api/jobs</h3>
+    <p style="color: var(--muted); margin-bottom: 12px;">列出所有生成任务，按创建时间倒序排列，支持分页。</p>
+    <p style="color: var(--muted); font-size: 0.88rem;">查询参数: <code>page</code>（页码，默认 1）、<code>limit</code>（每页数量，默认 50，最大 200）</p>
+    <p style="color: var(--muted); font-size: 0.85rem; margin-top: 8px;">注：列表视图会自动脱敏 <code>book_path</code> 和 <code>session_output</code> 等敏感参数，完整参数仅在单任务详情接口返回。</p>
+    <div class="code-block">{
+  "success": true,
+  "jobs": [
+    {
+      "id": "a1b2c3d4e5f6",
+      "type": "generate",
+      "status": "completed",
+      "progress": 100,
+      "created_at": 1783140000.0,
+      "started_at": 1783140001.0,
+      "completed_at": 1783140600.0
+    }
+  ],
+  "count": 1,
+  "total": 1,
+  "page": 1,
+  "limit": 50
+}</div>
+  </div>
+
+  <div class="card">
+    <h3>GET /api/jobs/&lt;job_id&gt;</h3>
+    <p style="color: var(--muted); margin-bottom: 12px;">查询单个任务的状态与结果。job_id 为 12 位十六进制。</p>
+    <div class="code-block">{
+  "success": true,
+  "job": {
+    "id": "a1b2c3d4e5f6",
+    "type": "generate",
+    "status": "completed",
+    "progress": 100,
+    "result": { "success": true, "total_time_sec": 120 },
+    "params": { "session_id": "a1b2c3d4e5f6", "engine": "auto" },
+    "logs": [
+      { "time": "12:00:01", "level": "info", "message": "Pipeline started" }
+    ]
+  }
+}</div>
+  </div>
+
+  <div class="card">
+    <h3>GET /api/sessions</h3>
+    <p style="color: var(--muted); margin-bottom: 12px;">列出所有播客会话，支持分页。</p>
+    <p style="color: var(--muted); font-size: 0.88rem;">查询参数: <code>page</code>（页码，默认 1）、<code>limit</code>（每页数量，默认 50，最大 200）</p>
+    <div class="code-block">{
+  "success": true,
+  "sessions": [
+    {
+      "session_id": "a1b2c3d4e5f6",
+      "dir_name": "session_a1b2c3d4e5f6",
+      "title": "用模型思考世界 — 双人辩论播客",
+      "episodes": 3,
+      "duration_min": 4.3,
+      "file_size_mb": 12.5,
+      "has_rss": true,
+      "has_script": true,
+      "created_at": "2026-07-04T12:00:00"
+    }
+  ],
+  "count": 1,
+  "total": 1,
+  "page": 1,
+  "limit": 50
+}</div>
+  </div>
+
+  <div class="card">
+    <h3>GET /api/session/&lt;session_id&gt;</h3>
+    <p style="color: var(--muted); margin-bottom: 12px;">获取单个会话详情，含所有集次信息。session_id 为 12 位十六进制。</p>
+    <div class="code-block">{
+  "success": true,
+  "session_id": "a1b2c3d4e5f6",
+  "title": "用模型思考世界 — 双人辩论播客",
+  "manifest": { "total_episodes": 3, "total_duration_ms": 258000 },
+  "episodes": [
+    {
+      "name": "episode_01.wav",
+      "url": "/api/download/a1b2c3d4e5f6/episode_01.wav",
+      "size_mb": 4.2
+    }
+  ],
+  "rss_url": "/api/rss/a1b2c3d4e5f6",
+  "script_url": "/podcast-output/session_a1b2c3d4e5f6/podcast_script.html"
+}</div>
+  </div>
+
+  <div class="card">
+    <h3>GET /api/rss/&lt;session_id&gt;</h3>
+    <p style="color: var(--muted); margin-bottom: 12px;">下载指定会话的 RSS 2.0 feed（XML）。</p>
+    <p style="color: var(--muted); font-size: 0.88rem;">响应类型: application/rss+xml; charset=utf-8</p>
+  </div>
+
+  <div class="card">
+    <h3>GET /api/download/&lt;session_id&gt;/&lt;filename&gt;</h3>
+    <p style="color: var(--muted); margin-bottom: 12px;">下载指定会话下的音频文件。</p>
+    <p style="color: var(--muted); font-size: 0.88rem;">响应类型: audio/wav 或 audio/mpeg（依文件扩展名）</p>
+  </div>
+
+  <div class="card">
+    <h3>安全特性</h3>
+    <table class="table" style="margin-top: 8px;">
+      <thead><tr><th>特性</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>文件上传限制</td><td>最大 100MB（可通过 PODCAST_MAX_UPLOAD_MB 环境变量配置）</td></tr>
+        <tr><td>Session/Job ID 校验</td><td>正则 <code>^[a-f0-9]{12}$</code> 防止路径遍历与非法 ID 注入</td></tr>
+        <tr><td>静态文件白名单</td><td>仅允许 .html/.css/.js/.png/.svg 等扩展名，阻止源码泄露</td></tr>
+        <tr><td>路径遍历防护</td><td><code>/podcast-output/</code> 路由通过 <code>Path.resolve()</code> + <code>relative_to()</code> 验证路径边界</td></tr>
+        <tr><td>请求限流</td><td>每 IP 每分钟 60 次请求（静态资源不计入），超 1000 IP 时自动清理过期记录</td></tr>
+        <tr><td>安全响应头</td><td>X-Content-Type-Options、X-Frame-Options、CSP、Referrer-Policy 等</td></tr>
+        <tr><td>XSS 防护</td><td>所有前端动态内容经 <code>escapeHtml()</code> 转义</td></tr>
+        <tr><td>请求日志</td><td>所有 API 请求记录方法、路径和来源 IP</td></tr>
+        <tr><td>表单字段限制</td><td>引擎名 ≤50 字符、文件名 ≤255 字符、集数 0-1000、格式 ≤10 字符</td></tr>
+        <tr><td>Job 内存限制</td><td>MAX_JOBS=200，超过时 LRU 淘汰已完成任务</td></tr>
+        <tr><td>Job TTL 清理</td><td>完成超过 1 小时的任务自动清理</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="section-title" id="pipeline">处理流水线架构</h2>
+  <p style="color: var(--muted); margin-bottom: 20px;">
+    增强版流水线共 7 个阶段（A-G），从书籍读取到 RSS 发布完整覆盖。
+  </p>
+
+  <div class="card">
+    <h3>Stage A: BookReader — 多格式书籍读取</h3>
+    <p style="color: var(--muted); font-size: 0.92rem;">
+      自动检测文件格式，提取章节结构和文本内容。集成 <strong>langdetect</strong> 进行语言检测，
+      支持 chardet 编码识别、pdfplumber 元数据提取、ebooklib EPUB TOC 解析、
+      python-docx Heading 样式识别与 BeautifulSoup HTML 解析。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Stage B: PodcastWriter — 双人辩论剧本生成</h3>
+    <p style="color: var(--muted); font-size: 0.92rem;">
+      将书籍章节转换为双人辩论格式剧本。每集包含 5 个段落：冷开场 → 深度讨论 → 达成共识 → 行动清单 → 下期预告。
+      阿哲（理论派）解释概念，老K（怀疑派）质疑挑战，输出结构化 HTML 剧本。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Stage C: TranscriptParser — HTML 结构化解析</h3>
+    <p style="color: var(--muted); font-size: 0.92rem;">
+      将 Stage B 输出的 HTML 剧本解析为结构化对话数据，识别角色标签、段落分段与场景标记，
+      为后续语音合成提供有序的台词序列。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Stage D: EnhancedTTSManager — 7 引擎语音合成</h3>
+    <p style="color: var(--muted); font-size: 0.92rem;">
+      集成 7 种 TTS 后端（XTTS-v2、edge-tts、MeloTTS、Piper、pyttsx3、espeak、ffmpeg-tts），
+      按 <strong>质量分（quality score）</strong> 自动择优选择，并根据角色分配差异化声线，
+      逐句合成语音。支持运行时可用性探测与自动回退。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Stage E: ProAudioProcessor — 专业音频后处理</h3>
+    <p style="color: var(--muted); font-size: 0.92rem;">
+      三层音频增强：<strong>noisereduce</strong> 进行 AI 降噪、<strong>pedalboard</strong>（Spotify）
+      应用录音棚级效果（压缩/EQ/混响/响度标准化）、<strong>FFmpeg</strong> 完成格式转换与最终编码。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Stage F: EpisodeAssembler — 集次拼接</h3>
+    <p style="color: var(--muted); font-size: 0.92rem;">
+      将 Stage D 合成的单句音频与 Stage E 后处理结果按剧本顺序拼接为完整单集音频，
+      生成片头/片尾过渡，输出最终节目文件。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Stage G: PodcastPackagerPro — 发布打包</h3>
+    <p style="color: var(--muted); font-size: 0.92rem;">
+      生成 <strong>RSS 2.0 feed</strong>（feedgen）、嵌入 <strong>ID3 标签</strong>（mutagen）
+      到每个音频文件，并生成节目说明（show notes），完成播客分发包打包。
+    </p>
+  </div>
+
+  <h2 class="section-title" id="tools">集成的开源工具</h2>
+  <div class="card">
+    <p style="color: var(--muted); margin-bottom: 16px;">
+      流水线整合以下开源项目，构成完整的端到端播客生成能力。
+    </p>
+    <table class="table">
+      <thead><tr><th>工具</th><th>用途</th><th>所属阶段</th></tr></thead>
+      <tbody>
+        <tr><td><strong>edge-tts</strong></td><td>Microsoft 神经网络在线 TTS</td><td>Stage D</td></tr>
+        <tr><td><strong>noisereduce</strong></td><td>AI 音频降噪</td><td>Stage E</td></tr>
+        <tr><td><strong>pedalboard</strong> (Spotify)</td><td>录音棚级音频效果链</td><td>Stage E</td></tr>
+        <tr><td><strong>feedgen</strong></td><td>RSS 2.0 feed 生成</td><td>Stage G</td></tr>
+        <tr><td><strong>mutagen</strong></td><td>音频元数据 / ID3 标签</td><td>Stage G</td></tr>
+        <tr><td><strong>FFmpeg</strong></td><td>音频编码 / 格式转换 / 拼接</td><td>Stage E / F</td></tr>
+        <tr><td><strong>langdetect</strong></td><td>文本语言自动检测</td><td>Stage A</td></tr>
+        <tr><td><strong>markdown</strong></td><td>Markdown → HTML 渲染</td><td>Stage B / G</td></tr>
+        <tr><td><strong>Flask</strong></td><td>REST API 与 Web 服务</td><td>API</td></tr>
+        <tr><td><strong>pydub</strong></td><td>音频片段处理</td><td>Stage E / F</td></tr>
+        <tr><td><strong>pdfplumber</strong></td><td>PDF 文本与表格提取</td><td>Stage A</td></tr>
+        <tr><td><strong>ebooklib</strong></td><td>EPUB 文档读取</td><td>Stage A</td></tr>
+        <tr><td><strong>python-docx</strong></td><td>Word 文档解析</td><td>Stage A</td></tr>
+        <tr><td><strong>chardet</strong></td><td>文本编码自动检测</td><td>Stage A</td></tr>
+        <tr><td><strong>BeautifulSoup4</strong></td><td>HTML 解析与剧本结构化</td><td>Stage A / C</td></tr>
+      </tbody>
+    </table>
+  </div>
+    </div> <!-- /docs-content -->
+  </div> <!-- /docs-layout -->
+</div>
+
+<script>
+/**
+ * Smooth scroll to a section and update TOC active state.
+ */
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+// Highlight current TOC entry based on scroll position
+(function() {
+  const sections = ['formats', 'cli', 'engines', 'api', 'pipeline', 'tools'];
+  const tocLinks = document.querySelectorAll('.docs-toc a');
+
+  function updateActiveTOC() {
+    const scrollY = window.scrollY + 120;
+    let activeIdx = 0;
+    for (let i = 0; i < sections.length; i++) {
+      const el = document.getElementById(sections[i]);
+      if (el && el.offsetTop <= scrollY) {
+        activeIdx = i;
+      }
+    }
+    tocLinks.forEach((link, i) => {
+      link.classList.toggle('active', i === activeIdx);
+    });
+  }
+
+  window.addEventListener('scroll', updateActiveTOC, { passive: true });
+  updateActiveTOC();
+})();
+</script>
+
+<footer>Book-to-Podcast Pipeline · 文档</footer>
+</body>
+</html>

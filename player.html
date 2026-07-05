@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>播放器 — Podcast Studio</title>
+<link rel="stylesheet" href="/_shared.css">
+<script src="/_shared.js"></script>
+<style>
+  .player-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 900px) { .player-layout { grid-template-columns: 1fr; } }
+  .transcript { max-height: 600px; overflow-y: auto; }
+  .transcript .line { padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: background 0.2s; }
+  .transcript .line:hover { background: var(--bg3); }
+  .transcript .line.active { background: var(--bg3); border-left: 3px solid var(--accent); }
+  .transcript .line .speaker { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; }
+  .transcript .line.a .speaker { color: #7b68ee; }
+  .transcript .line.b .speaker { color: var(--accent2); }
+  .transcript .line .text { font-size: 0.92rem; color: var(--ink); }
+  .player-info { text-align: center; margin-bottom: 20px; }
+  .player-info h2 { margin-bottom: 8px; }
+  .player-info .meta { justify-content: center; }
+  .episode-selector { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .ep-tab {
+    padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    background: var(--bg3); border: 1px solid var(--rule);
+    font-size: 0.85rem; transition: all 0.2s;
+  }
+  .ep-tab:hover { border-color: var(--accent2); }
+  .ep-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .session-select { margin-bottom: 20px; }
+  .session-select select { padding: 8px 16px; background: var(--bg3); border: 1px solid var(--rule); border-radius: 8px; color: var(--ink); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="brand">🎙 Podcast Studio</span>
+  <div class="nav-links">
+    <a href="/">首页</a>
+    <a href="/studio.html">工作室</a>
+    <a href="/library.html">播客库</a>
+    <a href="/player.html" class="active">播放器</a>
+    <a href="/docs.html">文档</a>
+  </div>
+</nav>
+
+<div class="main">
+  <h1 class="page-title">播客播放器</h1>
+
+  <div class="session-select card" style="padding: 16px;">
+    <label style="font-size: 0.9rem; color: var(--muted); margin-right: 12px;">选择播客项目:</label>
+    <select id="sessionSelect" onchange="onSessionChange()">
+      <option value="">加载中...</option>
+    </select>
+  </div>
+
+  <div class="episode-selector" id="episodeSelector"></div>
+
+  <div class="player-layout" id="playerLayout" style="display:none;">
+    <div>
+      <div class="card">
+        <div class="player-info">
+          <h2 id="epTitle">选择一集</h2>
+          <div class="meta" id="epMeta"></div>
+        </div>
+        <audio class="audio-player" id="audioPlayer" controls>
+          <source src="" id="audioSource" type="audio/wav">
+        </audio>
+        <div style="margin-top: 16px; display: flex; gap: 12px;">
+          <a class="btn btn-secondary" id="downloadBtn" href="#" download>⬇ 下载</a>
+          <a class="btn btn-secondary" id="notesBtn" href="#" target="_blank">📝 节目说明</a>
+          <a class="btn btn-secondary" id="rssBtn" href="#" target="_blank" style="display:none;">📡 RSS</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>音频详情</h3>
+        <table class="table">
+          <tr><td>格式</td><td id="detFormat">-</td></tr>
+          <tr><td>采样率</td><td id="detSampleRate">-</td></tr>
+          <tr><td>声道</td><td id="detChannels">-</td></tr>
+          <tr><td>时长</td><td id="detDuration">-</td></tr>
+          <tr><td>文件大小</td><td id="detFileSize">-</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>对话剧本</h3>
+      <div class="transcript" id="transcript">
+        <p style="color: var(--muted); text-align: center; padding: 40px;">选择一集播客后显示剧本</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="emptyState" class="card">
+    <p style="color: var(--muted); text-align: center; padding: 40px;">
+      还没有已生成的播客。<a href="/studio.html">前往工作室</a> 创建第一个。
+    </p>
+  </div>
+</div>
+
+<script>
+let currentSession = null;
+let currentEpisodes = [];
+let currentSessionDetail = null;
+
+async function loadSessions() {
+  try {
+    const data = await fetchWithTimeout('/api/sessions');
+    const sel = document.getElementById('sessionSelect');
+
+    if ((data.total || 0) === 0) {
+      sel.innerHTML = '<option value="">暂无播客项目</option>';
+      // Keep default emptyState: "还没有已生成的播客"
+      return;
+    }
+
+    sel.innerHTML = '<option value="">-- 选择播客 --</option>';
+    for (const s of data.sessions) {
+      const opt = document.createElement('option');
+      opt.value = s.session_id;
+      opt.textContent = s.title + ' (' + s.episodes + ' 集)';
+      sel.appendChild(opt);
+    }
+
+    // Sessions exist — update emptyState to prompt selection instead of "还没有"
+    document.getElementById('emptyState').innerHTML =
+      '<p style="color: var(--muted); text-align: center; padding: 40px;">' +
+      '请从上方选择一个播客项目开始播放。</p>';
+
+    // Check URL params for session
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get('session');
+    if (sessionId) {
+      sel.value = sessionId;
+      onSessionChange();
+    }
+  } catch(e) {
+    document.getElementById('sessionSelect').innerHTML = '<option value="">加载失败</option>';
+  }
+}
+
+async function onSessionChange() {
+  const sessionId = document.getElementById('sessionSelect').value;
+  if (!sessionId) {
+    document.getElementById('playerLayout').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+
+  currentSession = sessionId;
+
+  try {
+    const data = await fetchWithTimeout('/api/session/' + sessionId);
+    if (!data.success) {
+      // Use error code mapping for localized message
+      const msg = getErrorMessage(data);
+      document.getElementById('emptyState').innerHTML = '<p style="color:var(--accent);padding:20px;">加载失败: ' + escapeHtml(msg) + '</p>';
+      document.getElementById('emptyState').style.display = 'block';
+      return;
+    }
+
+    currentSessionDetail = data;
+    // Use runtime type validation
+    currentEpisodes = assertArray(data.episodes, 'episodes');
+
+    document.getElementById('playerLayout').style.display = 'grid';
+    document.getElementById('emptyState').style.display = 'none';
+
+    // RSS link
+    const rssBtn = document.getElementById('rssBtn');
+    if (data.rss_url) {
+      rssBtn.href = data.rss_url;
+      rssBtn.style.display = 'inline-flex';
+    } else {
+      rssBtn.style.display = 'none';
+    }
+
+    renderEpisodeSelector();
+  } catch(e) {
+    console.error('Session load error:', e);
+  }
+}
+
+function getEpisodeTitle(ep) {
+  // Try to find a semantic title from the manifest
+  if (currentSessionDetail && currentSessionDetail.manifest) {
+    const manifestEps = currentSessionDetail.manifest.episodes || [];
+    const epData = manifestEps.find(e => e.audio_path && e.audio_path.endsWith(ep.name));
+    if (epData && epData.title) return epData.title;
+  }
+  // Fall back to filename without extension
+  return ep.name.replace(/\.\w+/, '');
+}
+
+function renderEpisodeSelector() {
+  const sel = document.getElementById('episodeSelector');
+  sel.innerHTML = '';
+  for (const ep of currentEpisodes) {
+    const tab = document.createElement('div');
+    tab.className = 'ep-tab';
+    tab.textContent = getEpisodeTitle(ep);
+    tab.onclick = () => selectEpisode(ep);
+    sel.appendChild(tab);
+  }
+  if (currentEpisodes.length > 0) {
+    selectEpisode(currentEpisodes[0]);
+  }
+}
+
+async function selectEpisode(ep) {
+  document.querySelectorAll('.ep-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.ep-tab').forEach((t, i) => {
+    if (currentEpisodes[i] === ep) t.classList.add('active');
+  });
+
+  const audioUrl = ep.url;
+  const title = getEpisodeTitle(ep);
+
+  document.getElementById('epTitle').textContent = title;
+  const metaEl = document.getElementById('epMeta');
+  metaEl.textContent = '';
+  const metaSpan = document.createElement('span');
+  metaSpan.textContent = ep.size_mb + ' MB';
+  metaEl.appendChild(metaSpan);
+  document.getElementById('downloadBtn').href = audioUrl;
+
+  // Show notes link
+  const notesBtn = document.getElementById('notesBtn');
+  const notesName = encodeURIComponent(ep.name.replace('.wav', '.md').replace('.mp3', '.md'));
+  notesBtn.href = '/podcast-output/session_' + currentSession + '/podcast_package/show_notes/' + notesName;
+
+  // Audio details from manifest
+  const manifest = currentSessionDetail.manifest || {};
+  const manifestEpisodes = manifest.episodes || [];
+  const epData = manifestEpisodes.find(e => e.audio_path && e.audio_path.endsWith(ep.name));
+
+  if (epData) {
+    document.getElementById('detFormat').textContent = (epData.format || 'wav').toUpperCase();
+    document.getElementById('detSampleRate').textContent = (epData.sample_rate || 22050) + ' Hz';
+    document.getElementById('detChannels').textContent = (epData.channels || 1) === 1 ? 'Mono' : 'Stereo';
+    // Manifest stores duration in seconds, convert to minutes for display
+    const durSec = epData.duration_sec || 0;
+    document.getElementById('detDuration').textContent = (durSec / 60).toFixed(1) + ' min';
+    // Manifest stores file_size in bytes, convert to MB
+    const sizeBytes = epData.file_size || 0;
+    const sizeMb = sizeBytes > 0 ? sizeBytes / 1024 / 1024 : ep.size_mb;
+    document.getElementById('detFileSize').textContent = sizeMb.toFixed(1) + ' MB';
+  } else {
+    document.getElementById('detFormat').textContent = ep.name.split('.').pop().toUpperCase();
+    document.getElementById('detFileSize').textContent = ep.size_mb + ' MB';
+  }
+
+  // Load audio
+  const audio = document.getElementById('audioPlayer');
+  document.getElementById('audioSource').src = audioUrl;
+  audio.load();
+
+  // Load transcript
+  await loadTranscript(ep);
+}
+
+async function loadTranscript(ep) {
+  const container = document.getElementById('transcript');
+  const epNum = parseInt(ep.name.replace(/\D/g, '')) || 1;
+  container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;"><span class="spinner"></span> 加载剧本...</p>';
+
+  try {
+    const res = await fetch('/podcast-output/session_' + currentSession + '/synthesis/manifest.json');
+    if (!res.ok) throw new Error('No manifest');
+    const synthManifest = await res.json();
+    const allLines = assertArray(synthManifest.line_results, 'synthManifest.line_results');
+    // Filter by episode; include lines even if TTS failed (success=false)
+    let lines = allLines.filter(l => l.episode === epNum);
+    // If no episode match, try all lines (fallback for manifests without episode field)
+    if (lines.length === 0) lines = allLines.filter(l => l.text);
+
+    if (lines.length === 0) {
+      container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">该集无对话数据</p>';
+      return;
+    }
+
+    // Calculate cumulative start times for each line (for audio sync)
+    let cumulativeTime = 0;
+    container.innerHTML = '';
+    for (const line of lines) {
+      const lineDuration = line.audio_duration_sec || line.duration_sec || 0;
+      const div = document.createElement('div');
+      div.className = 'line ' + (line.speaker === '阿哲' ? 'a' : 'b');
+      // Store start time for click-to-seek
+      div.dataset.startTime = cumulativeTime.toFixed(2);
+      div.title = '点击跳转到此处播放';
+      div.onclick = () => seekTo(parseFloat(div.dataset.startTime));
+
+      const speakerEl = document.createElement('div');
+      speakerEl.className = 'speaker';
+      speakerEl.textContent = line.speaker;
+      const textEl = document.createElement('div');
+      textEl.className = 'text';
+      textEl.textContent = line.text;
+      div.appendChild(speakerEl);
+      div.appendChild(textEl);
+      container.appendChild(div);
+
+      cumulativeTime += lineDuration;
+    }
+
+    // Highlight current line during playback
+    startTranscriptSync();
+  } catch(e) {
+    container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">无法加载剧本</p>';
+  }
+}
+
+/**
+ * Seek audio player to a specific time in seconds.
+ */
+function seekTo(timeSec) {
+  const audio = document.getElementById('audioPlayer');
+  if (audio && !isNaN(timeSec)) {
+    audio.currentTime = timeSec;
+    audio.play().catch(() => {});
+  }
+}
+
+/**
+ * Highlight the current transcript line based on audio playback position.
+ */
+let syncTimer = null;
+function startTranscriptSync() {
+  if (syncTimer) clearInterval(syncTimer);
+  const audio = document.getElementById('audioPlayer');
+  const lines = document.querySelectorAll('.transcript .line');
+  if (!audio || lines.length === 0) return;
+
+  syncTimer = setInterval(() => {
+    const currentTime = audio.currentTime;
+    let activeIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const startTime = parseFloat(lines[i].dataset.startTime);
+      if (currentTime >= startTime) {
+        activeIdx = i;
+      } else {
+        break;
+      }
+    }
+    // Update active class
+    lines.forEach((l, i) => l.classList.toggle('active', i === activeIdx));
+    // Auto-scroll to active line
+    if (activeIdx >= 0) {
+      const activeLine = lines[activeIdx];
+      const container = document.getElementById('transcript');
+      const containerRect = container.getBoundingClientRect();
+      const lineRect = activeLine.getBoundingClientRect();
+      if (lineRect.top < containerRect.top || lineRect.bottom > containerRect.bottom) {
+        activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, 500);
+}
+
+loadSessions();
+</script>
+
+<footer>Book-to-Podcast Pipeline · 播放器</footer>
+</body>
+</html>

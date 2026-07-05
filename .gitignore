@@ -1,0 +1,48 @@
+# Podcast output - large audio files
+podcast-output/
+uploads/
+.uploads/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+*.log
+*.tmp
+/tmp/
+/data/user/work/*.py
+/data/user/work/*.png
+
+# Node modules (if any)
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Trae internal
+.trae-html-share-packages/

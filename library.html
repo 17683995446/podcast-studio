@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>播客库 — 已生成播客</title>
+<link rel="stylesheet" href="/_shared.css">
+<script src="/_shared.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="brand">🎙 Podcast Studio</span>
+  <div class="nav-links">
+    <a href="/">首页</a>
+    <a href="/studio.html">工作室</a>
+    <a href="/library.html" class="active">播客库</a>
+    <a href="/player.html">播放器</a>
+    <a href="/docs.html">文档</a>
+  </div>
+</nav>
+
+<div class="main">
+  <h1 class="page-title">播客库</h1>
+  <p style="color: var(--muted); margin-bottom: 32px;">浏览所有已生成的播客项目，下载音频和 RSS Feed</p>
+
+  <div id="libraryContent">
+    <div class="card">
+      <p style="color: var(--muted); text-align: center; padding: 40px;">
+        <span class="spinner"></span> 加载中...
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentPage = 1;
+const pageSize = 12;
+
+async function loadLibrary(page) {
+  if (page === undefined) page = currentPage;
+  currentPage = page;
+  const container = document.getElementById('libraryContent');
+  container.innerHTML = '<div class="card"><p style="color:var(--muted);text-align:center;padding:40px;"><span class="spinner"></span> 加载播客库...</p></div>';
+
+  try {
+    const data = await fetchWithTimeout('/api/sessions?page=' + page + '&limit=' + pageSize);
+
+    if ((data.total || 0) === 0) {
+      container.innerHTML = '<div class="card"><p style="color:var(--muted);text-align:center;padding:40px;">还没有已生成的播客。<a href="/studio.html">前往工作室</a> 创建第一个。</p></div>';
+      return;
+    }
+
+    let html = '';
+    // Use runtime type validation
+    const sessions = assertArray(data.sessions, 'sessions');
+    // Fetch all session details in parallel (not serial)
+    const detailPromises = sessions.map(s =>
+      fetchWithTimeout('/api/session/' + s.session_id).catch(() => null)
+    );
+    const details = await Promise.all(detailPromises);
+
+    for (let i = 0; i < sessions.length; i++) {
+      const session = sessions[i];
+      const detail = details[i];
+      let episodes = [];
+      let hasRss = session.has_rss;
+      let rssUrl = null;
+      let scriptUrl = null;
+      if (detail && detail.success) {
+        episodes = assertArray(detail.episodes, 'detail.episodes');
+        rssUrl = detail.rss_url;
+        scriptUrl = detail.script_url;
+      }
+
+      html += '<div class="card">';
+      html += '<h3>' + escapeHtml(session.title || session.dir_name) + '</h3>';
+      html += '<div class="meta" style="margin-bottom: 16px;">';
+      html += '<span class="badge badge-blue">' + escapeHtml(session.episodes) + ' 集</span>';
+      html += '<span>总时长 ' + (session.duration_min || 0).toFixed(1) + ' 分钟</span>';
+      html += '<span>总大小 ' + (session.file_size_mb || 0) + ' MB</span>';
+      if (session.created_at) html += '<span>创建于 ' + escapeHtml(formatDate(session.created_at)) + '</span>';
+      html += '</div>';
+
+      // Action buttons
+      html += '<div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap;">';
+      if (rssUrl) {
+        html += '<a class="btn btn-primary" href="' + escapeHtml(rssUrl) + '" target="_blank">📡 RSS Feed</a>';
+      }
+      if (scriptUrl) {
+        html += '<a class="btn btn-secondary" href="' + escapeHtml(scriptUrl) + '" target="_blank">📝 剧本 HTML</a>';
+      }
+      html += '</div>';
+
+      // Episode list
+      if (episodes.length > 0) {
+        html += '<div class="episode-list">';
+        for (const ep of episodes) {
+          html += '<div class="episode-item">';
+          html += '<span class="ep-badge">EP' + escapeHtml(ep.name.replace(/\D/g, '').padStart(2, '0')) + '</span>';
+          html += '<div class="ep-info">';
+          html += '<div class="ep-title">' + escapeHtml(ep.name) + '</div>';
+          html += '<div class="ep-meta">' + escapeHtml(ep.size_mb) + ' MB</div>';
+          html += '</div>';
+          html += '<div class="ep-actions">';
+          html += '<a class="btn btn-secondary" href="' + escapeHtml(ep.url) + '" target="_blank">▶️ 播放</a>';
+          html += '<a class="btn btn-secondary" href="' + escapeHtml(ep.url) + '" download>⬇️ 下载</a>';
+          html += '</div>';
+          html += '</div>';
+        }
+        html += '</div>';
+      } else {
+        html += '<p style="color:var(--muted);font-size:0.88rem;">暂无音频文件</p>';
+      }
+
+      html += '</div>';
+    }
+
+    // Pagination controls
+    const total = data.total || 0;
+    const totalPages = Math.ceil(total / pageSize);
+    if (totalPages > 1) {
+      html += '<div class="card" style="text-align:center;padding:16px;">';
+      html += '<div style="display:inline-flex;gap:8px;align-items:center;">';
+      // Prev button
+      if (page > 1) {
+        html += '<button class="btn btn-secondary" onclick="loadLibrary(' + (page - 1) + ')">← 上一页</button>';
+      } else {
+        html += '<button class="btn btn-secondary" disabled style="opacity:0.4;">← 上一页</button>';
+      }
+      // Page indicator
+      html += '<span style="color:var(--muted);font-size:0.9rem;min-width:80px;">第 ' + page + ' / ' + totalPages + ' 页</span>';
+      // Next button
+      if (page < totalPages) {
+        html += '<button class="btn btn-secondary" onclick="loadLibrary(' + (page + 1) + ')">下一页 →</button>';
+      } else {
+        html += '<button class="btn btn-secondary" disabled style="opacity:0.4;">下一页 →</button>';
+      }
+      html += '</div>';
+      html += '<div style="margin-top:8px;color:var(--muted);font-size:0.8rem;">共 ' + total + ' 个播客项目</div>';
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = '<div class="card"><p style="color:var(--accent);">加载失败: ' + escapeHtml(e.message) + '</p></div>';
+  }
+}
+loadLibrary(1);
+</script>
+
+<footer>Book-to-Podcast Pipeline · 播客库</footer>
+</body>
+</html>

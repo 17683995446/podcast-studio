@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>播客工作室 — 上传书籍</title>
+<link rel="stylesheet" href="/_shared.css">
+<script src="/_shared.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="brand">🎙 Podcast Studio</span>
+  <div class="nav-links">
+    <a href="/">首页</a>
+    <a href="/studio.html" class="active">工作室</a>
+    <a href="/library.html">播客库</a>
+    <a href="/player.html">播放器</a>
+    <a href="/docs.html">文档</a>
+  </div>
+</nav>
+
+<div class="main">
+  <h1 class="page-title">播客工作室</h1>
+  <p style="color: var(--muted); margin-bottom: 32px;">上传书籍文件，系统自动解析章节并生成双人辩论式播客</p>
+
+  <!-- Pipeline Unavailable Warning -->
+  <div class="card" id="pipelineWarning" style="display:none; border-left: 4px solid var(--accent); background: rgba(232, 93, 58, 0.08);">
+    <p style="margin: 0; color: var(--accent); font-weight: 600;">系统处于降级模式</p>
+    <p style="margin: 8px 0 0; color: var(--muted); font-size: 0.9rem;">
+      播客生成管道源不可用，无法上传和生成新播客。您可以继续浏览和播放已生成的播客项目。
+    </p>
+  </div>
+
+  <!-- Engine Status -->
+  <div class="card" id="enginePanel">
+    <h3>TTS 引擎状态</h3>
+    <p style="color: var(--muted); font-size: 0.88rem; margin-bottom: 16px;" id="engineStatus">加载中...</p>
+    <div class="engine-grid" id="engineGrid"></div>
+  </div>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="uploadZone">
+    <h2>上传书籍文件</h2>
+    <p>支持多种格式，拖放或点击选择</p>
+    <div class="format-badges">
+      <span class="format-badge">PDF</span>
+      <span class="format-badge">EPUB</span>
+      <span class="format-badge">TXT</span>
+      <span class="format-badge">DOCX</span>
+      <span class="format-badge">HTML</span>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf,.epub,.txt,.docx,.html,.htm" style="display:none;">
+    <button class="btn btn-primary btn-large" onclick="document.getElementById('fileInput').click()">
+      📁 选择书籍文件
+    </button>
+  </div>
+
+  <!-- Options Panel -->
+  <div class="card" id="optionsPanel" style="display:none;">
+    <h3>生成选项</h3>
+    <div class="options-grid" style="margin-bottom: 20px;">
+      <div class="option-group">
+        <label>TTS 引擎</label>
+        <select id="engineSelect">
+          <option value="">自动选择（按质量排序）</option>
+        </select>
+      </div>
+      <div class="option-group">
+        <label>最大集数（0=全部）</label>
+        <input type="number" id="maxEpisodes" value="3" min="0">
+      </div>
+      <div class="option-group">
+        <label>输出格式</label>
+        <select id="formatSelect">
+          <option value="wav">WAV</option>
+          <option value="mp3">MP3</option>
+        </select>
+      </div>
+    </div>
+
+    <h3 style="font-size: 0.95rem; margin-bottom: 8px; color: var(--muted);">音频处理 & 发布选项</h3>
+    <div class="options-grid">
+      <div class="toggle-group">
+        <div>
+          <label for="enableEq">语音均衡器</label>
+          <div class="desc">提升语音清晰度</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="enableEq"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-group">
+        <div>
+          <label for="enableNr">AI 降噪 (noisereduce)</label>
+          <div class="desc">去除背景噪声</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="enableNr" checked><span class="slider"></span></label>
+      </div>
+      <div class="toggle-group">
+        <div>
+          <label for="enablePb">工作室效果 (pedalboard)</label>
+          <div class="desc">压缩 + EQ + 限幅器</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="enablePb" checked><span class="slider"></span></label>
+      </div>
+      <div class="toggle-group">
+        <div>
+          <label for="generateRss">RSS Feed</label>
+          <div class="desc">生成播客 RSS 订阅源</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="generateRss" checked><span class="slider"></span></label>
+      </div>
+      <div class="toggle-group">
+        <div>
+          <label for="embedId3">ID3 标签</label>
+          <div class="desc">嵌入标题/作者/章节元数据</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="embedId3" checked><span class="slider"></span></label>
+      </div>
+      <div class="toggle-group">
+        <div>
+          <label for="scriptOnly">仅生成剧本</label>
+          <div class="desc">跳过 TTS 和音频处理</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="scriptOnly"><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px; display: flex; gap: 12px;">
+      <button class="btn btn-primary btn-large" id="generateBtn" onclick="startGeneration()">🚀 开始生成</button>
+      <button class="btn btn-secondary" onclick="resetUpload()">重新选择</button>
+    </div>
+    <div id="fileInfo" style="margin-top: 12px; color: var(--muted); font-size: 0.88rem;"></div>
+  </div>
+
+  <!-- Progress Panel -->
+  <div class="card" id="progressPanel" style="display:none;">
+    <h3>生成进度 <span id="jobStatusBadge" class="job-status job-pending">等待中</span></h3>
+    <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+    <div id="progressStatus" style="color: var(--muted); font-size: 0.88rem;"></div>
+    <div class="progress-log" id="progressLog"></div>
+  </div>
+
+  <!-- Results Panel -->
+  <div class="card" id="resultsPanel" style="display:none;">
+    <h3>生成结果</h3>
+    <div id="resultsContent"></div>
+  </div>
+</div>
+
+<script>
+let selectedFile = null;
+let pollTimer = null;
+let pollInterval = 2000;  // Start at 2s, will increase via exponential backoff
+let pollFailCount = 0;    // Track consecutive poll failures
+let pipelineAvailable = true;  // Updated by loadEngines()
+
+// === Engine Loading ===
+async function loadEngines() {
+  try {
+    const data = await fetchWithTimeout('/api/engines');
+    const grid = document.getElementById('engineGrid');
+    const status = document.getElementById('engineStatus');
+    const select = document.getElementById('engineSelect');
+
+    // Handle error responses (e.g. 503 when pipeline source is unavailable)
+    if (!data.success) {
+      pipelineAvailable = false;
+      // Use error code mapping instead of string matching
+      const displayMsg = getErrorMessage(data);
+      status.innerHTML = '<span style="color:var(--accent);">' + escapeHtml(displayMsg) + '</span>';
+      grid.innerHTML = '';
+      select.innerHTML = '<option value="">引擎不可用</option>';
+      // Show pipeline warning and disable upload zone
+      document.getElementById('pipelineWarning').style.display = 'block';
+      const uz = document.getElementById('uploadZone');
+      uz.style.opacity = '0.45';
+      uz.style.pointerEvents = 'none';
+      // Update upload zone text to reflect disabled state
+      const uploadDesc = uz.querySelector('p');
+      if (uploadDesc) uploadDesc.textContent = '系统降级中，上传功能已暂停';
+      const uploadBtn = uz.querySelector('button');
+      if (uploadBtn) uploadBtn.textContent = '🔒 上传功能暂不可用';
+      return;
+    }
+
+    pipelineAvailable = true;
+    status.innerHTML = `当前激活引擎: <strong style="color:var(--accent)">${escapeHtml(data.active_engine)}</strong>`;
+
+    let html = '';
+    let options = '<option value="">自动选择（按质量排序）</option>';
+    // Use runtime type validation for engines array
+    const engines = assertArray(data.engines, 'engines');
+    for (const e of engines) {
+      const cls = e.available ? 'available' : '';
+      const active = e.name === data.active_engine ? 'active' : '';
+      const statusIcon = e.available ? '✅' : '❌';
+      const qualityPct = (e.quality_score / 10) * 100;
+      const offline = e.is_offline ? '离线' : '在线';
+      const zh = e.supports_chinese ? '中文✓' : '中文✗';
+      const safeName = escapeHtml(e.name);
+      html += `<div class="engine-card ${cls} ${active}">
+        <div class="eng-name">${safeName} ${statusIcon}</div>
+        <div class="eng-quality">质量 ${e.quality_score}/10
+          <span class="quality-bar"><span class="quality-fill" style="width:${qualityPct}%"></span></span>
+        </div>
+        <div class="eng-status ${e.available ? 'ok' : 'no'}">${offline} · ${zh} · ${e.voice_count} 声音</div>
+      </div>`;
+      if (e.available) {
+        options += `<option value="${safeName}">${safeName} (质量${e.quality_score})</option>`;
+      }
+    }
+    grid.innerHTML = html;
+    select.innerHTML = options;
+  } catch(e) {
+    pipelineAvailable = false;
+    document.getElementById('engineStatus').textContent = '引擎信息加载失败: ' + e.message;
+    document.getElementById('pipelineWarning').style.display = 'block';
+    const uz = document.getElementById('uploadZone');
+    uz.style.opacity = '0.45';
+    uz.style.pointerEvents = 'none';
+    const uploadDesc = uz.querySelector('p');
+    if (uploadDesc) uploadDesc.textContent = '系统降级中，上传功能已暂停';
+    const uploadBtn = uz.querySelector('button');
+    if (uploadBtn) uploadBtn.textContent = '🔒 上传功能暂不可用';
+  }
+}
+
+// === File Upload ===
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+});
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files[0]);
+});
+
+function handleFileSelect(file) {
+  if (!pipelineAvailable) { alert('系统处于降级模式，播客生成不可用'); return; }
+  const exts = ['.pdf','.epub','.txt','.docx','.html','.htm'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  if (!exts.includes(ext)) { alert('不支持的格式: ' + ext); return; }
+  selectedFile = file;
+  document.getElementById('fileInfo').innerHTML = '已选择: <strong>' + escapeHtml(file.name) + '</strong> (' + (file.size/1024/1024).toFixed(1) + ' MB)';
+  document.getElementById('optionsPanel').style.display = 'block';
+}
+
+function resetUpload() {
+  selectedFile = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('optionsPanel').style.display = 'none';
+  document.getElementById('fileInfo').innerHTML = '';
+}
+
+// === Job Logging ===
+function addLog(msg, level='info') {
+  const log = document.getElementById('progressLog');
+  const line = document.createElement('div');
+  line.className = 'log-line log-' + level;
+  line.textContent = '[' + new Date().toLocaleTimeString('zh-CN') + '] ' + msg;
+  log.appendChild(line); log.scrollTop = log.scrollHeight;
+}
+
+function updateProgress(pct, status) {
+  document.getElementById('progressBar').style.width = pct + '%';
+  if (status) document.getElementById('progressStatus').textContent = status;
+}
+
+function setJobStatus(status) {
+  const badge = document.getElementById('jobStatusBadge');
+  const labels = {
+    'pending': ['job-pending', '等待中'],
+    'running': ['job-running', '运行中'],
+    'completed': ['job-completed', '已完成'],
+    'failed': ['job-failed', '失败'],
+  };
+  const [cls, label] = labels[status] || ['job-pending', status];
+  badge.className = 'job-status ' + cls;
+  badge.innerHTML = status === 'running' ? '<span class="spinner"></span> ' + label : label;
+}
+
+// === Async Generation ===
+async function startGeneration() {
+  if (!pipelineAvailable) { alert('系统处于降级模式，播客生成不可用'); return; }
+  if (!selectedFile) { alert('请先选择文件'); return; }
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  fd.append('engine', document.getElementById('engineSelect').value);
+  fd.append('maxEpisodes', document.getElementById('maxEpisodes').value);
+  fd.append('format', document.getElementById('formatSelect').value);
+  fd.append('enableEq', document.getElementById('enableEq').checked);
+  fd.append('scriptOnly', document.getElementById('scriptOnly').checked);
+  fd.append('enableNoiseReduction', document.getElementById('enableNr').checked);
+  fd.append('enablePedalboard', document.getElementById('enablePb').checked);
+  fd.append('generateRss', document.getElementById('generateRss').checked);
+  fd.append('embedId3', document.getElementById('embedId3').checked);
+
+  document.getElementById('progressPanel').style.display = 'block';
+  document.getElementById('resultsPanel').style.display = 'none';
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('progressLog').innerHTML = '';
+  setJobStatus('pending');
+  addLog('上传文件: ' + selectedFile.name);
+  updateProgress(5, '上传中...');
+
+  try {
+    const result = await fetchWithTimeout('/api/generate', { method: 'POST', body: fd }, 60000);
+
+    if (result.success) {
+      addLog('任务已创建: ' + result.job_id, 'success');
+      updateProgress(10, '排队中...');
+      pollJobStatus(result.job_id);
+    } else {
+      addLog('失败: ' + (result.error || '未知错误'), 'error');
+      setJobStatus('failed');
+      document.getElementById('generateBtn').disabled = false;  // Re-enable on failure
+    }
+  } catch(e) {
+    addLog('请求失败: ' + e.message, 'error');
+    addLog('可使用命令行: python3 book_to_podcast.py --book "your_book.pdf"', 'warn');
+    setJobStatus('failed');
+    document.getElementById('generateBtn').disabled = false;  // Re-enable on error
+  }
+  // Note: button stays disabled when polling starts — polling re-enables on completion
+}
+
+function pollJobStatus(jobId) {
+  setJobStatus('running');
+  if (pollTimer) clearInterval(pollTimer);
+  pollInterval = 2000;  // Reset to initial interval
+  pollFailCount = 0;
+
+  const poll = async () => {
+    try {
+      const data = await fetchWithTimeout('/api/jobs/' + jobId, {}, 10000);
+      if (!data.success) return;
+      const job = data.job;
+      pollFailCount = 0;  // Reset failure count on success
+
+      // Update logs
+      if (job.logs) {
+        const logEl = document.getElementById('progressLog');
+        const currentLines = logEl.children.length;
+        for (let i = currentLines; i < job.logs.length; i++) {
+          const l = job.logs[i];
+          const line = document.createElement('div');
+          line.className = 'log-line log-' + (l.level || 'info');
+          line.textContent = '[' + l.time + '] ' + l.message;
+          logEl.appendChild(line);
+        }
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      // Update progress based on status
+      if (job.status === 'running') {
+        updateProgress(50, '处理中...');
+        setJobStatus('running');
+      } else if (job.status === 'completed') {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        updateProgress(100, '完成!');
+        setJobStatus('completed');
+        addLog('播客生成成功!', 'success');
+        displayResults(job.result, job.params);
+        document.getElementById('generateBtn').disabled = false;  // Re-enable on completion
+        return;
+      } else if (job.status === 'failed') {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        updateProgress(0, '失败');
+        setJobStatus('failed');
+        addLog('失败: ' + (job.error || '未知错误'), 'error');
+        document.getElementById('generateBtn').disabled = false;  // Re-enable on failure
+        return;
+      }
+    } catch(e) {
+      pollFailCount++;
+      console.error('Poll error:', e);
+      if (pollFailCount >= 5) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        addLog('连接中断: 已连续失败 ' + pollFailCount + ' 次，请检查服务状态', 'error');
+        setJobStatus('failed');
+        document.getElementById('generateBtn').disabled = false;
+        return;
+      }
+    }
+    // Exponential backoff: 2s → 4s → 8s, capped at 10s
+    pollInterval = Math.min(pollInterval * 1.5, 10000);
+    clearInterval(pollTimer);
+    pollTimer = setInterval(poll, Math.round(pollInterval));
+  };
+  pollTimer = setInterval(poll, pollInterval);
+}
+
+function displayResults(result, params) {
+  const panel = document.getElementById('resultsPanel');
+  const content = document.getElementById('resultsContent');
+  panel.style.display = 'block';
+
+  const stages = result.stages || {};
+  const bookReading = stages.book_reading || {};
+  const scriptGen = stages.script_generation || {};
+  const synthesis = stages.synthesis || {};
+  const postProc = stages.post_processing || {};
+  const assembly = stages.assembly || {};
+  const rssPkg = stages.rss_packaging || {};
+
+  let html = '<div class="meta" style="margin-bottom:16px;">';
+  html += '<span class="badge badge-success">成功</span>';
+  html += '<span>书名: ' + escapeHtml(bookReading.title || '') + '</span>';
+  html += '<span>语言: ' + escapeHtml(bookReading.language || '') + '</span>';
+  html += '<span>集数: ' + escapeHtml(assembly.episodes_assembled || 0) + '</span>';
+  if (assembly.total_duration_min) html += '<span>时长: ' + escapeHtml(assembly.total_duration_min) + ' 分钟</span>';
+  if (assembly.total_file_size_mb) html += '<span>大小: ' + escapeHtml(assembly.total_file_size_mb) + ' MB</span>';
+  html += '</div>';
+
+  // Stage details
+  html += '<table class="table" style="margin-bottom:16px;">';
+  html += '<tr><th>阶段</th><th>详情</th></tr>';
+  html += '<tr><td>A. 书籍读取</td><td>' + escapeHtml(bookReading.chapters || 0) + ' 章, ' + escapeHtml(bookReading.total_words || 0) + ' 词, 格式 ' + escapeHtml(bookReading.format || '') + '</td></tr>';
+  html += '<tr><td>B. 剧本生成</td><td>' + escapeHtml(scriptGen.episodes || 0) + ' 集, ' + escapeHtml(scriptGen.total_lines || 0) + ' 行对话</td></tr>';
+  html += '<tr><td>D. TTS 合成</td><td>引擎: ' + escapeHtml(synthesis.engine || '') + escapeHtml(synthesis.enhanced ? ' (增强)' : '') + ', ' + escapeHtml(synthesis.successful_lines || 0) + '/' + escapeHtml(synthesis.total_lines || 0) + ' 行成功</td></tr>';
+  if (postProc.processor) html += '<tr><td>E. 音频处理</td><td>' + escapeHtml(postProc.processor) + ', ' + escapeHtml(postProc.successful_files || 0) + ' 文件, NR=' + escapeHtml(postProc.noise_reduced_count || 0) + ', EQ=' + escapeHtml(postProc.eq_applied_count || 0) + '</td></tr>';
+  html += '<tr><td>F. 单集组装</td><td>' + escapeHtml(assembly.episodes_assembled || 0) + ' 集, ' + escapeHtml(assembly.total_duration_min || 0) + ' 分钟</td></tr>';
+  if (rssPkg.rss_generated !== undefined) {
+    html += '<tr><td>G. RSS & ID3</td><td>RSS=' + (rssPkg.rss_generated ? '✅' : '❌') + ', ID3=' + escapeHtml(rssPkg.tags_embedded || 0) + ' 标签, Notes=' + escapeHtml(rssPkg.notes_count || 0) + '</td></tr>';
+  }
+  html += '<tr><td>总耗时</td><td>' + escapeHtml(result.total_time_sec || 0) + ' 秒</td></tr>';
+  html += '</table>';
+
+  // Links
+  const sessionId = params ? params.session_id : '';
+  if (result.script_path) {
+    const p = encodeURI(result.script_path.replace('/workspace',''));
+    html += '<div style="margin-bottom:12px;"><a class="btn btn-primary" href="' + p + '" target="_blank">📝 查看剧本 HTML</a> ';
+  }
+  if (sessionId) {
+    html += '<a class="btn btn-secondary" href="/api/rss/' + escapeHtml(sessionId) + '" target="_blank">📡 RSS Feed</a> ';
+    html += '<a class="btn btn-secondary" href="/library.html">📚 播客库</a></div>';
+  } else {
+    html += '<a class="btn btn-secondary" href="/studio.html">再做一个</a></div>';
+  }
+
+  // Audio player
+  if (sessionId && (assembly.episodes_assembled || 0) > 0) {
+    const fmt = params ? params.format || 'wav' : 'wav';
+    html += '<audio class="audio-player" controls><source src="/api/download/' + escapeHtml(sessionId) + '/episode_01.' + escapeHtml(fmt) + '" type="audio/' + escapeHtml(fmt) + '"></audio>';
+  }
+
+  content.innerHTML = html;
+}
+
+// Init
+loadEngines();
+</script>
+
+<footer>Book-to-Podcast Pipeline · 工作室</footer>
+</body>
+</html>

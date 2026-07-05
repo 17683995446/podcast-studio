@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>播客生成系统 — 知识卡片</title>
+<link rel="stylesheet" href="/_shared.css">
+<script src="/_shared.js"></script>
+<style>
+  /* ── 抖音式全屏竖屏卡片 ── */
+  html, body { height: 100%; overflow: hidden; margin: 0; }
+  body { background: var(--bg); }
+
+  /* 导航栏改为透明覆盖式 */
+  .navbar {
+    position: fixed !important;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 100%) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: none !important;
+  }
+
+  .feed-container {
+    height: 100vh;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    padding-top: 0;
+    box-sizing: border-box;
+  }
+  .feed-container::-webkit-scrollbar { width: 0; }
+
+  .card-slide {
+    height: 100vh;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* 渐变背景层 — 填满全屏 */
+  .card-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    transition: opacity 0.6s;
+  }
+
+  /* 知识卡片主体 — 全屏沉浸式，内容在底部 */
+  .knowledge-card {
+    position: relative;
+    z-index: 2;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: none;
+    border-radius: 0;
+    padding: 70px 28px 90px;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    animation: cardIn 0.5s ease-out;
+  }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(30px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* 卡片头部标签 */
+  .kc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(0,0,0,0.3);
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+    align-self: flex-start;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    margin-top: auto;
+  }
+
+  /* 卡片标题 */
+  .kc-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.35;
+    margin-bottom: 16px;
+    color: #fff;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  }
+
+  /* 知识要点引用 */
+  .kc-insight {
+    font-size: 1.1rem;
+    line-height: 1.85;
+    color: rgba(255,255,255,0.92);
+    margin-bottom: 20px;
+    padding: 16px 18px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 12px;
+    border-left: 3px solid var(--accent2);
+    flex-shrink: 0;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+  }
+
+  /* 卡片底部信息 */
+  .kc-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .kc-meta { display: flex; flex-direction: column; gap: 2px; }
+  .kc-podcast-name { font-size: 0.85rem; font-weight: 600; color: var(--ink); }
+  .kc-ep-info { font-size: 0.75rem; color: var(--muted); }
+  .kc-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .kc-tag {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(74,158,255,0.12);
+    color: var(--accent2);
+  }
+
+  /* ── 右侧操作栏（抖音式）── */
+  .action-rail {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+  }
+  .action-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(26,29,40,0.8);
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    backdrop-filter: blur(10px);
+    color: var(--ink);
+    font-size: 1.3rem;
+    position: relative;
+  }
+  .action-btn:hover { background: rgba(232,93,58,0.2); border-color: var(--accent); transform: scale(1.1); }
+  .action-btn:active { transform: scale(0.92); }
+  .action-btn .label {
+    position: absolute;
+    bottom: -20px;
+    font-size: 0.65rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .action-btn.liked { color: var(--accent); }
+
+  /* ── 滑动提示 ── */
+  .swipe-hint {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    color: rgba(255,255,255,0.35);
+    font-size: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    animation: bounceUp 2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes bounceUp {
+    0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.35; }
+    50% { transform: translateX(-50%) translateY(-8px); opacity: 0.7; }
+  }
+
+  /* ── 欢迎卡片（居中） ── */
+  .welcome-card {
+    text-align: center;
+    justify-content: center !important;
+    padding: 40px 32px;
+  }
+  .welcome-card .kc-badge { align-self: center; }
+  .welcome-card .kc-title { font-size: 1.9rem; text-shadow: 0 2px 10px rgba(0,0,0,0.7); }
+  .welcome-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 20px 0;
+  }
+  .welcome-stat {
+    text-align: center;
+    padding: 14px 6px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .welcome-stat .val { font-size: 1.5rem; font-weight: 800; color: var(--accent2); text-shadow: 0 1px 6px rgba(0,0,0,0.5); }
+  .welcome-stat .lbl { font-size: 0.68rem; color: rgba(255,255,255,0.6); margin-top: 2px; }
+
+  .welcome-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .welcome-actions a {
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .welcome-actions a.primary { background: var(--accent); color: #fff; }
+  .welcome-actions a.primary:hover { background: #f06b48; transform: translateY(-2px); }
+  .welcome-actions a.secondary { background: rgba(255,255,255,0.08); color: var(--ink); border: 1px solid rgba(255,255,255,0.1); }
+  .welcome-actions a.secondary:hover { background: rgba(255,255,255,0.12); }
+
+  /* ── 健康检查浮窗 ── */
+  .health-fab {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 50;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--bg2);
+    border: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: all 0.2s;
+  }
+  .health-fab:hover { border-color: var(--accent2); }
+  .health-fab .dot {
+    position: absolute;
+    top: 4px; right: 4px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+  }
+  .health-fab .dot.degraded { background: var(--accent); }
+
+  .health-panel {
+    position: fixed;
+    bottom: 72px;
+    left: 20px;
+    z-index: 51;
+    width: 280px;
+    background: var(--bg2);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    display: none;
+  }
+  .health-panel.show { display: block; animation: slideUp 0.3s ease-out; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .health-panel h4 { font-size: 0.85rem; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .health-panel .h-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; padding: 4px 0; }
+  .health-panel .h-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .health-panel .h-dot.ok { background: var(--success); }
+  .health-panel .h-dot.fail { background: var(--accent); }
+
+  /* ── 空状态 ── */
+  .empty-feed {
+    text-align: center;
+    color: var(--muted);
+    padding: 60px 24px;
+  }
+  .empty-feed a { color: var(--accent2); }
+
+  /* ── 分页指示器 ── */
+  .page-dots {
+    position: fixed;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .page-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+  .page-dot.active { background: var(--accent); height: 18px; border-radius: 3px; }
+
+  /* 响应式 */
+  @media (max-width: 640px) {
+    .knowledge-card { padding: 24px 20px; }
+    .kc-title { font-size: 1.25rem; }
+    .kc-insight { font-size: 0.95rem; }
+    .action-rail { right: 10px; gap: 14px; }
+    .action-btn { width: 40px; height: 40px; font-size: 1.1rem; }
+    .page-dots { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="brand">🎙 Podcast Studio</span>
+  <div class="nav-links">
+    <a href="/" class="active">首页</a>
+    <a href="/studio.html">工作室</a>
+    <a href="/library.html">播客库</a>
+    <a href="/player.html">播放器</a>
+    <a href="/docs.html">文档</a>
+  </div>
+</nav>
+
+<!-- 抖音式知识卡片流 -->
+<div class="feed-container" id="feedContainer">
+  <!-- 卡片由 JS 动态生成 -->
+</div>
+
+<!-- 分页指示器 -->
+<div class="page-dots" id="pageDots"></div>
+
+<!-- 健康检查浮窗 -->
+<div class="health-fab" id="healthFab" onclick="toggleHealthPanel()">
+  <span>💊</span>
+  <span class="dot" id="healthDot"></span>
+</div>
+<div class="health-panel" id="healthPanel">
+  <h4>系统健康 <button class="btn btn-secondary" style="font-size:0.7rem;padding:2px 8px;" onclick="loadHealth(true)">⟳</button></h4>
+  <div id="healthList"></div>
+</div>
+
+<script>
+// ── 知识卡片数据 ──
+let knowledgeCards = [];
+let currentCardIndex = 0;
+
+// ── 渐变色方案（每张卡片不同）──
+const gradients = [
+  'linear-gradient(135deg, #0f1117 0%, #1a2332 40%, #2a1a3a 100%)',
+  'linear-gradient(135deg, #0f1117 0%, #1a2a1f 40%, #1a3a2a 100%)',
+  'linear-gradient(135deg, #0f1117 0%, #2a1a1f 40%, #3a2a1a 100%)',
+  'linear-gradient(135deg, #0f1117 0%, #1a1a2a 40%, #2a2a3a 100%)',
+  'linear-gradient(135deg, #0f1117 0%, #231a2a 40%, #3a1a2a 100%)',
+  'linear-gradient(135deg, #0f1117 0%, #1a232a 40%, #1a3a3a 100%)',
+];
+
+// ── 加载播客数据并生成知识卡片 ──
+async function loadFeed() {
+  const container = document.getElementById('feedContainer');
+  container.innerHTML = '<div class="card-slide"><div class="knowledge-card welcome-card"><p style="color:var(--muted);"><span class="spinner"></span> 加载知识卡片...</p></div></div>';
+
+  try {
+    const sessionsData = await fetchWithTimeout('/api/sessions');
+    const sessions = assertArray(sessionsData.sessions, 'sessions');
+
+    // 收集所有 episode 的知识点
+    const cards = [];
+
+    // 欢迎卡片（第一张）
+    let totalEpisodes = 0, totalDuration = 0;
+    for (const s of sessions) {
+      totalEpisodes += s.episodes || 0;
+      totalDuration += s.duration_min || 0;
+    }
+
+    // 获取引擎数
+    let engineCount = '7';
+    try {
+      const engineData = await fetchWithTimeout('/api/engines');
+      if (engineData.success) {
+        const engines = assertArray(engineData.engines, 'engines');
+        const available = engines.filter(e => e.available).length;
+        engineCount = available + '/' + engines.length;
+      }
+    } catch(e) {}
+
+    cards.push({
+      type: 'welcome',
+      stats: {
+        sessions: sessionsData.total || 0,
+        episodes: totalEpisodes,
+        duration: totalDuration.toFixed(0),
+        engines: engineCount,
+      }
+    });
+
+    // 为每个 session 获取详情并提取知识点
+    const detailPromises = sessions.map(s =>
+      fetchWithTimeout('/api/session/' + s.session_id).catch(() => null)
+    );
+    const details = await Promise.all(detailPromises);
+
+    // 每本书（session）生成一张卡片 — 精选最有洞察力的一句话
+    for (let i = 0; i < sessions.length; i++) {
+      const session = sessions[i];
+      const detail = details[i];
+      if (!detail || !detail.success) continue;
+
+      const manifest = detail.manifest || {};
+      const episodes = assertArray(manifest.episodes, 'manifest.episodes');
+
+      // 尝试获取剧本中的对话知识点
+      let insights = [];
+      try {
+        const synthRes = await fetch('/podcast-output/session_' + session.session_id + '/synthesis/manifest.json');
+        if (synthRes.ok) {
+          const synthManifest = await synthRes.json();
+          const lines = assertArray(synthManifest.line_results, 'synth.line_results');
+          // 提取有深度的对话行作为知识点
+          insights = lines.filter(l => l.success && l.text && l.text.length > 15)
+                          .map(l => ({ speaker: l.speaker, text: l.text, episode: l.episode }));
+        }
+      } catch(e) {}
+
+      // 如果没有获取到知识点，用 episode 信息生成
+      if (insights.length === 0 && episodes.length > 0) {
+        for (const ep of episodes) {
+          insights.push({
+            speaker: '阿哲',
+            text: '理解框架比记住结论更重要。试着用新的视角重新审视你遇到的问题。',
+            episode: episodes.indexOf(ep) + 1,
+          });
+        }
+      }
+
+      // 每本书只取最精华的一张卡片（选最长、最有洞察力的那句）
+      if (insights.length > 0) {
+        // 按文本长度降序排列，选最有深度的那条
+        const best = insights.slice().sort((a, b) => b.text.length - a.text.length)[0];
+        const epInfo = episodes[best.episode - 1] || {};
+        cards.push({
+          type: 'knowledge',
+          sessionId: session.session_id,
+          podcastTitle: manifest.title || session.title || '未知播客',
+          episodeCount: episodes.length || session.episodes || 0,
+          totalDuration: session.duration_min || 0,
+          episodeNum: best.episode || 1,
+          episodeTitle: epInfo.title || `第${best.episode || 1}集`,
+          insight: best.text,
+          speaker: best.speaker || '阿哲',
+          duration: epInfo.duration_sec ? (epInfo.duration_sec / 60).toFixed(1) + ' 分钟' : (session.duration_min ? session.duration_min.toFixed(1) + ' 分钟' : ''),
+          tags: generateTags(best.text, manifest.title || session.title),
+        });
+      }
+    }
+
+    knowledgeCards = cards;
+    renderFeed();
+  } catch(e) {
+    container.innerHTML = '<div class="card-slide"><div class="knowledge-card"><div class="empty-feed"><p>加载失败: ' + escapeHtml(e.message) + '</p><p style="margin-top:12px;"><a href="/studio.html">前往工作室</a></p></div></div></div>';
+  }
+}
+
+function generateTags(text, title) {
+  const tags = [];
+  if (text.includes('模型') || text.includes('框架')) tags.push('思维模型');
+  if (text.includes('决策') || text.includes('选择')) tags.push('决策');
+  if (text.includes('概率') || text.includes('统计')) tags.push('概率');
+  if (text.includes('问题') || text.includes('解决')) tags.push('问题分析');
+  if (text.includes('学习') || text.includes('理解')) tags.push('认知');
+  if (tags.length === 0) tags.push('知识');
+  return tags.slice(0, 3);
+}
+
+// ── 渲染知识卡片流 ──
+function renderFeed() {
+  const container = document.getElementById('feedContainer');
+  const dotsContainer = document.getElementById('pageDots');
+  let html = '';
+  let dotsHtml = '';
+
+  for (let i = 0; i < knowledgeCards.length; i++) {
+    const card = knowledgeCards[i];
+    const bg = gradients[i % gradients.length];
+
+    if (card.type === 'welcome') {
+      html += renderWelcomeCard(card, bg, i);
+    } else {
+      html += renderKnowledgeCard(card, bg, i);
+    }
+
+    dotsHtml += '<div class="page-dot' + (i === 0 ? ' active' : '') + '" onclick="scrollToCard(' + i + ')"></div>';
+  }
+
+  container.innerHTML = html;
+  dotsContainer.innerHTML = dotsHtml;
+
+  // 监听滚动更新指示器
+  container.addEventListener('scroll', updateActiveDot);
+  // 绑定操作按钮
+  bindActions();
+}
+
+function renderWelcomeCard(card, bg, idx) {
+  return `
+    <div class="card-slide" data-index="${idx}">
+      <div class="card-bg" style="background: ${bg};"></div>
+      <div class="knowledge-card welcome-card">
+        <div class="kc-badge">🎙️ 播客知识流</div>
+        <h2 class="kc-title">从书籍到知识卡片</h2>
+        <p style="color:rgba(255,255,255,0.6);font-size:0.9rem;margin-bottom:8px;">
+          上滑浏览 · 每次滑动切换一本书的播客精选洞察
+        </p>
+        <div class="welcome-stats">
+          <div class="welcome-stat"><div class="val">${card.stats.sessions}</div><div class="lbl">播客项目</div></div>
+          <div class="welcome-stat"><div class="val">${card.stats.episodes}</div><div class="lbl">总集数</div></div>
+          <div class="welcome-stat"><div class="val">${card.stats.duration}</div><div class="lbl">总时长(分)</div></div>
+        </div>
+        <div class="welcome-stats">
+          <div class="welcome-stat"><div class="val">${card.stats.engines}</div><div class="lbl">TTS 引擎</div></div>
+          <div class="welcome-stat"><div class="val">5</div><div class="lbl">支持格式</div></div>
+          <div class="welcome-stat"><div class="val">7</div><div class="lbl">流水线阶段</div></div>
+        </div>
+        <div class="welcome-actions">
+          <a href="/studio.html" class="primary">📚 开始制作</a>
+          <a href="/library.html" class="secondary">🎵 播客库</a>
+          <a href="/player.html" class="secondary">▶️ 播放器</a>
+          <a href="/docs.html" class="secondary">📖 文档</a>
+        </div>
+      </div>
+      <div class="swipe-hint">
+        <span>👆 上滑看下一本</span>
+        <span>⌄</span>
+      </div>
+    </div>`;
+}
+
+function renderKnowledgeCard(card, bg, idx) {
+  const tagsHtml = card.tags.map(t => `<span class="kc-tag">${escapeHtml(t)}</span>`).join('');
+  const epCount = card.episodeCount || 1;
+  const totalDur = card.totalDuration ? card.totalDuration.toFixed(1) : '';
+  return `
+    <div class="card-slide" data-index="${idx}">
+      <div class="card-bg" style="background: ${bg};"></div>
+      <div class="knowledge-card">
+        <div class="kc-badge">📖 第 ${idx} 本书</div>
+        <h2 class="kc-title">${escapeHtml(card.podcastTitle)}</h2>
+        <div class="kc-insight">
+          <strong style="color:var(--accent2);">${escapeHtml(card.speaker)}：</strong>
+          ${escapeHtml(card.insight)}
+        </div>
+        <div class="kc-footer">
+          <div class="kc-meta">
+            <span class="kc-podcast-name">${epCount} 集 · ${totalDur} 分钟</span>
+            <span class="kc-ep-info">精选自第 ${card.episodeNum} 集 · ${escapeHtml(card.episodeTitle)}</span>
+          </div>
+          <div class="kc-tags">${tagsHtml}</div>
+        </div>
+      </div>
+      <!-- 右侧操作栏 -->
+      <div class="action-rail">
+        <div class="action-btn" onclick="playEpisode('${card.sessionId}', ${card.episodeNum})" title="播放">
+          ▶️<span class="label">播放</span>
+        </div>
+        <div class="action-btn" id="likeBtn-${idx}" onclick="toggleLike(${idx})" title="点赞">
+          ❤️<span class="label">${formatCount(Math.floor(Math.random() * 200) + 10)}</span>
+        </div>
+        <div class="action-btn" onclick="downloadEpisode('${card.sessionId}', ${card.episodeNum})" title="下载">
+          ⬇️<span class="label">下载</span>
+        </div>
+        <div class="action-btn" onclick="shareCard(${idx})" title="分享">
+          🔗<span class="label">分享</span>
+        </div>
+        <div class="action-btn" onclick="scrollToCard(${idx + 1 < knowledgeCards.length ? idx + 1 : 0})" title="下一本">
+          ⌄<span class="label">下一本</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── 交互功能 ──
+function scrollToCard(idx) {
+  if (idx < 0 || idx >= knowledgeCards.length) return;
+  const container = document.getElementById('feedContainer');
+  const slides = container.querySelectorAll('.card-slide');
+  if (slides[idx]) {
+    slides[idx].scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+function updateActiveDot() {
+  const container = document.getElementById('feedContainer');
+  const idx = Math.round(container.scrollTop / container.clientHeight);
+  if (idx !== currentCardIndex) {
+    currentCardIndex = idx;
+    const dots = document.querySelectorAll('.page-dot');
+    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+  }
+}
+
+function playEpisode(sessionId, epNum) {
+  window.location.href = `/player.html?session=${sessionId}`;
+}
+
+function toggleLike(idx) {
+  const btn = document.getElementById('likeBtn-' + idx);
+  if (!btn) return;
+  btn.classList.toggle('liked');
+  const label = btn.querySelector('.label');
+  let count = parseInt(label.textContent) || 0;
+  if (btn.classList.contains('liked')) {
+    count++;
+    label.textContent = formatCount(count);
+  } else {
+    count--;
+    label.textContent = formatCount(count);
+  }
+}
+
+function downloadEpisode(sessionId, epNum) {
+  const filename = `episode_${String(epNum).padStart(2, '0')}.wav`;
+  window.open(`/api/download/${sessionId}/${filename}`, '_blank');
+}
+
+function shareCard(idx) {
+  const card = knowledgeCards[idx];
+  if (!card) return;
+  const text = `【知识卡片】${card.episodeTitle}\n${card.insight}\n— 来自 ${card.podcastTitle}`;
+  if (navigator.share) {
+    navigator.share({ title: card.episodeTitle, text: text });
+  } else {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('已复制到剪贴板');
+    }).catch(() => {
+      showToast('分享失败');
+    });
+  }
+}
+
+function formatCount(n) {
+  if (n >= 10000) return (n / 10000).toFixed(1) + 'w';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return String(n);
+}
+
+function showToast(msg) {
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--bg2);color:var(--ink);padding:10px 24px;border-radius:8px;border:1px solid var(--rule);z-index:9999;font-size:0.9rem;animation:slideUp 0.3s;';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2500);
+}
+
+function bindActions() {
+  // 键盘导航
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'j') {
+      e.preventDefault();
+      scrollToCard(currentCardIndex + 1);
+    } else if (e.key === 'ArrowUp' || e.key === 'k') {
+      e.preventDefault();
+      scrollToCard(currentCardIndex - 1);
+    }
+  });
+
+  // 触摸滑动增强
+  let touchStartY = 0;
+  const container = document.getElementById('feedContainer');
+  container.addEventListener('touchstart', (e) => {
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+}
+
+// ── 健康检查 ──
+async function loadHealth(force) {
+  try {
+    const url = force ? '/api/health?force=true' : '/api/health';
+    const data = await fetchWithTimeout(url);
+    const checks = assertObject(data.checks, {}, 'health.checks');
+    const labels = {
+      edge_tts: 'edge-tts', ffmpeg: 'FFmpeg', noisereduce: 'noisereduce',
+      pedalboard: 'pedalboard', feedgen: 'feedgen', mutagen: 'mutagen',
+      langdetect: 'langdetect', markdown: 'markdown',
+    };
+
+    let html = '';
+    let allOk = true;
+    for (const [key, ok] of Object.entries(checks)) {
+      const label = labels[key] || key;
+      html += `<div class="h-item"><span class="h-dot ${ok ? 'ok' : 'fail'}"></span><span>${escapeHtml(label)}</span></div>`;
+      if (!ok) allOk = false;
+    }
+    document.getElementById('healthList').innerHTML = html;
+    document.getElementById('healthDot').className = 'dot' + (allOk ? '' : ' degraded');
+  } catch(e) {
+    document.getElementById('healthList').innerHTML = '<p style="color:var(--muted);font-size:0.8rem;">检查失败</p>';
+    document.getElementById('healthDot').className = 'dot degraded';
+  }
+}
+
+function toggleHealthPanel() {
+  const panel = document.getElementById('healthPanel');
+  panel.classList.toggle('show');
+}
+
+// ── 启动 ──
+loadFeed();
+loadHealth();
+</script>
+
+<footer style="position:fixed;bottom:0;right:0;padding:8px 16px;color:var(--muted);font-size:0.7rem;pointer-events:none;z-index:5;">
+  Book-to-Podcast Pipeline · 知识卡片流
+</footer>
+</body>
+</html>
